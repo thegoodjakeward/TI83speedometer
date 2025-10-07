@@ -1,0 +1,697 @@
+    4 00:0000 -  -  -  -  .org userMem
+    5 00:9D95 BB 6D -  -  .db t2ByteTok, tAsmCmp
+    6 00:9D97 -  -  -  -  
+    7 00:9D97 -  -  -  -  ; ================================================================
+    8 00:9D97 -  -  -  -  ; Constants for digit placement (in bytes)
+    9 00:9D97 -  -  -  -  ; ================================================================
+   10 00:9D97 -  -  -  -  LEFT_DIGIT_OFFSET  .equ (4*12 + 1)		; make a parameter LEFT_DIGIT_OFFSET = 4 rows and 1 column shift
+   11 00:9D97 -  -  -  -  RIGHT_DIGIT_OFFSET .equ (4*12 + 7)		; make a parameter RIGHT_DIGIT_OFFSET = 4 rows and 7 column shift
+   12 00:9D97 -  -  -  -  
+   13 00:9D97 -  -  -  -  ; ================================================================
+   14 00:9D97 -  -  -  -  ; Main routine
+   15 00:9D97 -  -  -  -  ; ================================================================
+   16 00:9D97 EF D0 4B -      bcall(_GrBufClr)				; clear graph buffer
+Listing for file "/source.asm"
+   17 00:9D9A EF D7 4A -      bcall(_RclAns)					; grab value stored in Ans
+   18 00:9D9D EF EF 4A -      bcall(_ConvOP1)					; put Ans into A register, assume Ans will be between 0-99 inclusive
+   19 00:9DA0 -  -  -  -  
+   20 00:9DA0 -  -  -  -  ;----------------------------------------
+   21 00:9DA0 -  -  -  -  ; Split A into tens and ones digits
+   22 00:9DA0 -  -  -  -  ;----------------------------------------
+   23 00:9DA0 06 00 -  -      ld b, 0							; B will be used to store tens digit. initially set to 0
+   24 00:9DA2 -  -  -  -  divide_loop:
+   25 00:9DA2 FE 0A -  -      cp 10							; compare A to 10
+   26 00:9DA4 38 05 -  -      jr c, division_done				; if A drops below zero, the carry flag will be set and we will jump to division_done
+   27 00:9DA6 D6 0A -  -      sub 10							; subtract 10 from A
+   28 00:9DA8 04 -  -  -      inc b							; increase the tens place (B) because we haven't reached below zero yet so we subtracted another 10
+   29 00:9DA9 18 F7 -  -      jr divide_loop					; keep looping until we are done with division
+   30 00:9DAB -  -  -  -  division_done:
+   31 00:9DAB -  -  -  -  	; we couldn't subtract any more tens without going negative, so B holds the corrects tens place and what's left in A is the ones place (remainder)
+   32 00:9DAB -  -  -  -  
+   33 00:9DAB -  -  -  -  ;----------------------------------------
+   34 00:9DAB -  -  -  -  ; Draw tens digit
+   35 00:9DAB -  -  -  -  ;----------------------------------------
+   36 00:9DAB F5 -  -  -      push af							; store AF on the stack. We don't need F, but you can only put register pairs on the stack
+   37 00:9DAC 78 -  -  -      ld a, b							; put tens place (B) into A
+   38 00:9DAD 21 31 00 -      ld hl, LEFT_DIGIT_OFFSET		; set HL equal to the left digit (tens place) screen offset
+   39 00:9DB0 CD BE 9D -      call draw_digit					; call the draw_digit function
+   40 00:9DB3 F1 -  -  -      pop af							; restore AF because now A will hold the ones place digit value
+   41 00:9DB4 -  -  -  -  
+   42 00:9DB4 -  -  -  -  ;----------------------------------------
+   43 00:9DB4 -  -  -  -  ; Draw ones digit
+   44 00:9DB4 -  -  -  -  ;----------------------------------------
+   45 00:9DB4 21 37 00 -      ld hl, RIGHT_DIGIT_OFFSET		; set HL equal to the right digit (ones place) screen offset
+   46 00:9DB7 CD BE 9D -      call draw_digit					; call the draw_digit function
+   47 00:9DBA -  -  -  -  
+   48 00:9DBA -  -  -  -  ;----------------------------------------
+   49 00:9DBA -  -  -  -  ; Copy buffer to LCD
+   50 00:9DBA -  -  -  -  ;----------------------------------------
+   51 00:9DBA EF 6A 48 -      bcall(_GrBufCpy)				; update the screen with what we've put in the graph buffer
+   52 00:9DBD C9 -  -  -      ret
+   53 00:9DBE -  -  -  -  
+   54 00:9DBE -  -  -  -  
+   55 00:9DBE -  -  -  -  ; ================================================================
+   56 00:9DBE -  -  -  -  ; draw_digit
+   57 00:9DBE -  -  -  -  ; Input: A = digit (0–9)
+   58 00:9DBE -  -  -  -  ;        HL = offset from PlotSScreen
+   59 00:9DBE -  -  -  -  ; ================================================================
+   60 00:9DBE -  -  -  -  draw_digit:
+   61 00:9DBE E5 -  -  -      push hl							; preserve offset
+   62 00:9DBF CD CC 9D -      call get_digit_ptr				; call get_digit_ptr. sprite data address is now in DE
+   63 00:9DC2 E1 -  -  -      pop hl							; restore offset into HL
+   64 00:9DC3 01 40 93 -      ld bc, PlotSScreen				; put base screen address into BC
+   65 00:9DC6 09 -  -  -      add hl, bc						; add offset to base screen address
+   66 00:9DC7 EB -  -  -      ex de, hl						; swap DE and HL so that DE (destination) now contains the screen + offset address, and HL (source) points to the sprite data
+   67 00:9DC8 CD D8 9D -      call draw_sprite32x56			; now that we have the correct destination and source, call draw_sprite32x56
+   68 00:9DCB C9 -  -  -      ret
+   69 00:9DCC -  -  -  -  
+   70 00:9DCC -  -  -  -  
+   71 00:9DCC -  -  -  -  ; ================================================================
+   72 00:9DCC -  -  -  -  ; get_digit_ptr
+   73 00:9DCC -  -  -  -  ; Input:  A = digit (0–9)
+   74 00:9DCC -  -  -  -  ; Output: DE = pointer to sprite data
+   75 00:9DCC -  -  -  -  ; ================================================================
+   76 00:9DCC -  -  -  -  get_digit_ptr:
+   77 00:9DCC 21 EB 9D -      ld hl, sprite_table				; set HL to the start of the sprite table
+   78 00:9DCF 5F -  -  -      ld e, a		     
+   79 00:9DD0 16 00 -  -      ld d, 0							; put the digit from A into DE
+   80 00:9DD2 19 -  -  -      add hl, de		          
+   81 00:9DD3 19 -  -  -      add hl, de						; add 2*digit to get to the right part of the sprite table since each digit in that table is 2 bytes
+   82 00:9DD4 5E -  -  -      ld e, (hl)						; copy lower byte from the sprite table into E
+   83 00:9DD5 23 -  -  -      inc hl							; move HL up one to look at the higher byte in the sprite table
+   84 00:9DD6 56 -  -  -      ld d, (hl)						; copy higher byte from the sprite table into E
+   85 00:9DD7 C9 -  -  -      ret								; now DE contains a pointer to the relevant sprite data
+   86 00:9DD8 -  -  -  -  
+   87 00:9DD8 -  -  -  -  
+   88 00:9DD8 -  -  -  -  ; ================================================================
+   89 00:9DD8 -  -  -  -  ; draw_sprite32x56
+   90 00:9DD8 -  -  -  -  ; HL = source (sprite)
+   91 00:9DD8 -  -  -  -  ; DE = destination (PlotSScreen)
+   92 00:9DD8 -  -  -  -  ; ================================================================
+   93 00:9DD8 -  -  -  -  draw_sprite32x56:
+   94 00:9DD8 06 38 -  -      ld b, 56						; B is our row counter. each sprite is 56 rows so we want to repeat row_loop 56 times
+   95 00:9DDA -  -  -  -  row_loop:
+   96 00:9DDA C5 -  -  -      push bc							; save off BC to the stack to preserve our row counter as we will soon use BC for a column counter
+   97 00:9DDB 01 04 00 -      ld bc, 4						; BC is now our column counter. each sprite is 4 bytes wide so we want to copy 4 times
+   98 00:9DDE ED B0 -  -      ldir							; copies all 4 bytes for this row. HL+=4, DE+=4, BC-=4 -> BC=0
+   99 00:9DE0 C1 -  -  -      pop bc							; restore BC so we get our row counter back
+  100 00:9DE1 7B -  -  -      ld a, e							; we already moved 4 bytes, but a full row is 12 bytes, so to get to the next row, we have to move an additional 8 bytes
+  101 00:9DE2 C6 08 -  -      add a, 8
+  102 00:9DE4 5F -  -  -      ld e, a							; add 8 onto DE to update our destination to the start of the next row
+  103 00:9DE5 30 01 -  -      jr nc, skip_inc_d				; if no carry occurs when adding 8 to E, skip to skip_inc_d. else, increment D to account for carry
+  104 00:9DE7 14 -  -  -      inc d
+  105 00:9DE8 -  -  -  -  skip_inc_d:
+  106 00:9DE8 10 F0 -  -      djnz row_loop					; decrement BC (our row counter) and run row_loop again. when BC=0 it will move to the next line and return
+  107 00:9DEA C9 -  -  -      ret
+  108 00:9DEB -  -  -  -  
+  109 00:9DEB -  -  -  -  
+  110 00:9DEB -  -  -  -  ; ================================================================
+  111 00:9DEB -  -  -  -  ; Sprite table and data
+  112 00:9DEB -  -  -  -  ; ================================================================
+  113 00:9DEB -  -  -  -  sprite_table:
+  114 00:9DEB FF 9D -  -      .dw digit0
+  115 00:9DED DF 9E -  -      .dw digit1
+  116 00:9DEF BF 9F -  -      .dw digit2
+  117 00:9DF1 9F A0 -  -      .dw digit3
+  118 00:9DF3 7F A1 -  -      .dw digit4
+  119 00:9DF5 5F A2 -  -      .dw digit5
+  120 00:9DF7 3F A3 -  -      .dw digit6
+  121 00:9DF9 1F A4 -  -      .dw digit7
+  122 00:9DFB FF A4 -  -      .dw digit8
+  123 00:9DFD DF A5 -  -      .dw digit9
+  124 00:9DFF -  -  -  -  
+  125 00:9DFF -  -  -  -  digit0:
+  126 00:9DFF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  127 00:9E03 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  128 00:9E07 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  129 00:9E0B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  130 00:9E0F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  131 00:9E13 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  132 00:9E17 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  133 00:9E1B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  134 00:9E1F FF 00 00 FF     .db $FF, $00, $00, $FF
+  135 00:9E23 FF 00 00 FF     .db $FF, $00, $00, $FF
+  136 00:9E27 FF 00 00 FF     .db $FF, $00, $00, $FF
+  137 00:9E2B FF 00 00 FF     .db $FF, $00, $00, $FF
+  138 00:9E2F FF 00 00 FF     .db $FF, $00, $00, $FF
+  139 00:9E33 FF 00 00 FF     .db $FF, $00, $00, $FF
+  140 00:9E37 FF 00 00 FF     .db $FF, $00, $00, $FF
+  141 00:9E3B FF 00 00 FF     .db $FF, $00, $00, $FF
+  142 00:9E3F FF 00 00 FF     .db $FF, $00, $00, $FF
+  143 00:9E43 FF 00 00 FF     .db $FF, $00, $00, $FF
+  144 00:9E47 FF 00 00 FF     .db $FF, $00, $00, $FF
+  145 00:9E4B FF 00 00 FF     .db $FF, $00, $00, $FF
+  146 00:9E4F FF 00 00 FF     .db $FF, $00, $00, $FF
+  147 00:9E53 FF 00 00 FF     .db $FF, $00, $00, $FF
+  148 00:9E57 FF 00 00 FF     .db $FF, $00, $00, $FF
+  149 00:9E5B FF 00 00 FF     .db $FF, $00, $00, $FF
+  150 00:9E5F FF 00 00 FF     .db $FF, $00, $00, $FF
+  151 00:9E63 FF 00 00 FF     .db $FF, $00, $00, $FF
+  152 00:9E67 FF 00 00 FF     .db $FF, $00, $00, $FF
+  153 00:9E6B FF 00 00 FF     .db $FF, $00, $00, $FF
+  154 00:9E6F FF 00 00 FF     .db $FF, $00, $00, $FF
+  155 00:9E73 FF 00 00 FF     .db $FF, $00, $00, $FF
+  156 00:9E77 FF 00 00 FF     .db $FF, $00, $00, $FF
+  157 00:9E7B FF 00 00 FF     .db $FF, $00, $00, $FF
+  158 00:9E7F FF 00 00 FF     .db $FF, $00, $00, $FF
+  159 00:9E83 FF 00 00 FF     .db $FF, $00, $00, $FF
+  160 00:9E87 FF 00 00 FF     .db $FF, $00, $00, $FF
+  161 00:9E8B FF 00 00 FF     .db $FF, $00, $00, $FF
+  162 00:9E8F FF 00 00 FF     .db $FF, $00, $00, $FF
+  163 00:9E93 FF 00 00 FF     .db $FF, $00, $00, $FF
+  164 00:9E97 FF 00 00 FF     .db $FF, $00, $00, $FF
+  165 00:9E9B FF 00 00 FF     .db $FF, $00, $00, $FF
+  166 00:9E9F FF 00 00 FF     .db $FF, $00, $00, $FF
+  167 00:9EA3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  168 00:9EA7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  169 00:9EAB FF 00 00 FF     .db $FF, $00, $00, $FF
+  170 00:9EAF FF 00 00 FF     .db $FF, $00, $00, $FF
+  171 00:9EB3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  172 00:9EB7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  173 00:9EBB FF 00 00 FF     .db $FF, $00, $00, $FF
+  174 00:9EBF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  175 00:9EC3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  176 00:9EC7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  177 00:9ECB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  178 00:9ECF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  179 00:9ED3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  180 00:9ED7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  181 00:9EDB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  182 00:9EDF -  -  -  -  digit1:
+  183 00:9EDF 00 00 00 FF     .db $00, $00, $00, $FF
+  184 00:9EE3 00 00 00 FF     .db $00, $00, $00, $FF
+  185 00:9EE7 00 00 00 FF     .db $00, $00, $00, $FF
+  186 00:9EEB 00 00 00 FF     .db $00, $00, $00, $FF
+  187 00:9EEF 00 00 00 FF     .db $00, $00, $00, $FF
+  188 00:9EF3 00 00 00 FF     .db $00, $00, $00, $FF
+  189 00:9EF7 00 00 00 FF     .db $00, $00, $00, $FF
+  190 00:9EFB 00 00 00 FF     .db $00, $00, $00, $FF
+  191 00:9EFF 00 00 00 FF     .db $00, $00, $00, $FF
+  192 00:9F03 00 00 00 FF     .db $00, $00, $00, $FF
+  193 00:9F07 00 00 00 FF     .db $00, $00, $00, $FF
+  194 00:9F0B 00 00 00 FF     .db $00, $00, $00, $FF
+  195 00:9F0F 00 00 00 FF     .db $00, $00, $00, $FF
+  196 00:9F13 00 00 00 FF     .db $00, $00, $00, $FF
+  197 00:9F17 00 00 00 FF     .db $00, $00, $00, $FF
+  198 00:9F1B 00 00 00 FF     .db $00, $00, $00, $FF
+  199 00:9F1F 00 00 00 FF     .db $00, $00, $00, $FF
+  200 00:9F23 00 00 00 FF     .db $00, $00, $00, $FF
+  201 00:9F27 00 00 00 FF     .db $00, $00, $00, $FF
+  202 00:9F2B 00 00 00 FF     .db $00, $00, $00, $FF
+  203 00:9F2F 00 00 00 FF     .db $00, $00, $00, $FF
+  204 00:9F33 00 00 00 FF     .db $00, $00, $00, $FF
+  205 00:9F37 00 00 00 FF     .db $00, $00, $00, $FF
+  206 00:9F3B 00 00 00 FF     .db $00, $00, $00, $FF
+  207 00:9F3F 00 00 00 FF     .db $00, $00, $00, $FF
+  208 00:9F43 00 00 00 FF     .db $00, $00, $00, $FF
+  209 00:9F47 00 00 00 FF     .db $00, $00, $00, $FF
+  210 00:9F4B 00 00 00 FF     .db $00, $00, $00, $FF
+  211 00:9F4F 00 00 00 FF     .db $00, $00, $00, $FF
+  212 00:9F53 00 00 00 FF     .db $00, $00, $00, $FF
+  213 00:9F57 00 00 00 FF     .db $00, $00, $00, $FF
+  214 00:9F5B 00 00 00 FF     .db $00, $00, $00, $FF
+  215 00:9F5F 00 00 00 FF     .db $00, $00, $00, $FF
+  216 00:9F63 00 00 00 FF     .db $00, $00, $00, $FF
+  217 00:9F67 00 00 00 FF     .db $00, $00, $00, $FF
+  218 00:9F6B 00 00 00 FF     .db $00, $00, $00, $FF
+  219 00:9F6F 00 00 00 FF     .db $00, $00, $00, $FF
+  220 00:9F73 00 00 00 FF     .db $00, $00, $00, $FF
+  221 00:9F77 00 00 00 FF     .db $00, $00, $00, $FF
+  222 00:9F7B 00 00 00 FF     .db $00, $00, $00, $FF
+  223 00:9F7F 00 00 00 FF     .db $00, $00, $00, $FF
+  224 00:9F83 00 00 00 FF     .db $00, $00, $00, $FF
+  225 00:9F87 00 00 00 FF     .db $00, $00, $00, $FF
+  226 00:9F8B 00 00 00 FF     .db $00, $00, $00, $FF
+  227 00:9F8F 00 00 00 FF     .db $00, $00, $00, $FF
+  228 00:9F93 00 00 00 FF     .db $00, $00, $00, $FF
+  229 00:9F97 00 00 00 FF     .db $00, $00, $00, $FF
+  230 00:9F9B 00 00 00 FF     .db $00, $00, $00, $FF
+  231 00:9F9F 00 00 00 FF     .db $00, $00, $00, $FF
+  232 00:9FA3 00 00 00 FF     .db $00, $00, $00, $FF
+  233 00:9FA7 00 00 00 FF     .db $00, $00, $00, $FF
+  234 00:9FAB 00 00 00 FF     .db $00, $00, $00, $FF
+  235 00:9FAF 00 00 00 FF     .db $00, $00, $00, $FF
+  236 00:9FB3 00 00 00 FF     .db $00, $00, $00, $FF
+  237 00:9FB7 00 00 00 FF     .db $00, $00, $00, $FF
+  238 00:9FBB 00 00 00 FF     .db $00, $00, $00, $FF
+  239 00:9FBF -  -  -  -  digit2:
+  240 00:9FBF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  241 00:9FC3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  242 00:9FC7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  243 00:9FCB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  244 00:9FCF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  245 00:9FD3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  246 00:9FD7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  247 00:9FDB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  248 00:9FDF 00 00 00 FF     .db $00, $00, $00, $FF
+  249 00:9FE3 00 00 00 FF     .db $00, $00, $00, $FF
+  250 00:9FE7 00 00 00 FF     .db $00, $00, $00, $FF
+  251 00:9FEB 00 00 00 FF     .db $00, $00, $00, $FF
+  252 00:9FEF 00 00 00 FF     .db $00, $00, $00, $FF
+  253 00:9FF3 00 00 00 FF     .db $00, $00, $00, $FF
+  254 00:9FF7 00 00 00 FF     .db $00, $00, $00, $FF
+  255 00:9FFB 00 00 00 FF     .db $00, $00, $00, $FF
+  256 00:9FFF 00 00 00 FF     .db $00, $00, $00, $FF
+  257 00:A003 00 00 00 FF     .db $00, $00, $00, $FF
+  258 00:A007 00 00 00 FF     .db $00, $00, $00, $FF
+  259 00:A00B 00 00 00 FF     .db $00, $00, $00, $FF
+  260 00:A00F 00 00 00 FF     .db $00, $00, $00, $FF
+  261 00:A013 00 00 00 FF     .db $00, $00, $00, $FF
+  262 00:A017 00 00 00 FF     .db $00, $00, $00, $FF
+  263 00:A01B 00 00 00 FF     .db $00, $00, $00, $FF
+  264 00:A01F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  265 00:A023 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  266 00:A027 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  267 00:A02B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  268 00:A02F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  269 00:A033 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  270 00:A037 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  271 00:A03B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  272 00:A03F FF 00 00 00     .db $FF, $00, $00, $00
+  273 00:A043 FF 00 00 00     .db $FF, $00, $00, $00
+  274 00:A047 FF 00 00 00     .db $FF, $00, $00, $00
+  275 00:A04B FF 00 00 00     .db $FF, $00, $00, $00
+  276 00:A04F FF 00 00 00     .db $FF, $00, $00, $00
+  277 00:A053 FF 00 00 00     .db $FF, $00, $00, $00
+  278 00:A057 FF 00 00 00     .db $FF, $00, $00, $00
+  279 00:A05B FF 00 00 00     .db $FF, $00, $00, $00
+  280 00:A05F FF 00 00 00     .db $FF, $00, $00, $00
+  281 00:A063 FF 00 00 00     .db $FF, $00, $00, $00
+  282 00:A067 FF 00 00 00     .db $FF, $00, $00, $00
+  283 00:A06B FF 00 00 00     .db $FF, $00, $00, $00
+  284 00:A06F FF 00 00 00     .db $FF, $00, $00, $00
+  285 00:A073 FF 00 00 00     .db $FF, $00, $00, $00
+  286 00:A077 FF 00 00 00     .db $FF, $00, $00, $00
+  287 00:A07B FF 00 00 00     .db $FF, $00, $00, $00
+  288 00:A07F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  289 00:A083 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  290 00:A087 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  291 00:A08B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  292 00:A08F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  293 00:A093 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  294 00:A097 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  295 00:A09B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  296 00:A09F -  -  -  -  digit3:
+  297 00:A09F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  298 00:A0A3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  299 00:A0A7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  300 00:A0AB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  301 00:A0AF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  302 00:A0B3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  303 00:A0B7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  304 00:A0BB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  305 00:A0BF 00 00 00 FF     .db $00, $00, $00, $FF
+  306 00:A0C3 00 00 00 FF     .db $00, $00, $00, $FF
+  307 00:A0C7 00 00 00 FF     .db $00, $00, $00, $FF
+  308 00:A0CB 00 00 00 FF     .db $00, $00, $00, $FF
+  309 00:A0CF 00 00 00 FF     .db $00, $00, $00, $FF
+  310 00:A0D3 00 00 00 FF     .db $00, $00, $00, $FF
+  311 00:A0D7 00 00 00 FF     .db $00, $00, $00, $FF
+  312 00:A0DB 00 00 00 FF     .db $00, $00, $00, $FF
+  313 00:A0DF 00 00 00 FF     .db $00, $00, $00, $FF
+  314 00:A0E3 00 00 00 FF     .db $00, $00, $00, $FF
+  315 00:A0E7 00 00 00 FF     .db $00, $00, $00, $FF
+  316 00:A0EB 00 00 00 FF     .db $00, $00, $00, $FF
+  317 00:A0EF 00 00 00 FF     .db $00, $00, $00, $FF
+  318 00:A0F3 00 00 00 FF     .db $00, $00, $00, $FF
+  319 00:A0F7 00 00 00 FF     .db $00, $00, $00, $FF
+  320 00:A0FB 00 00 00 FF     .db $00, $00, $00, $FF
+  321 00:A0FF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  322 00:A103 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  323 00:A107 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  324 00:A10B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  325 00:A10F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  326 00:A113 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  327 00:A117 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  328 00:A11B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  329 00:A11F 00 00 00 FF     .db $00, $00, $00, $FF
+  330 00:A123 00 00 00 FF     .db $00, $00, $00, $FF
+  331 00:A127 00 00 00 FF     .db $00, $00, $00, $FF
+  332 00:A12B 00 00 00 FF     .db $00, $00, $00, $FF
+  333 00:A12F 00 00 00 FF     .db $00, $00, $00, $FF
+  334 00:A133 00 00 00 FF     .db $00, $00, $00, $FF
+  335 00:A137 00 00 00 FF     .db $00, $00, $00, $FF
+  336 00:A13B 00 00 00 FF     .db $00, $00, $00, $FF
+  337 00:A13F 00 00 00 FF     .db $00, $00, $00, $FF
+  338 00:A143 00 00 00 FF     .db $00, $00, $00, $FF
+  339 00:A147 00 00 00 FF     .db $00, $00, $00, $FF
+  340 00:A14B 00 00 00 FF     .db $00, $00, $00, $FF
+  341 00:A14F 00 00 00 FF     .db $00, $00, $00, $FF
+  342 00:A153 00 00 00 FF     .db $00, $00, $00, $FF
+  343 00:A157 00 00 00 FF     .db $00, $00, $00, $FF
+  344 00:A15B 00 00 00 FF     .db $00, $00, $00, $FF
+  345 00:A15F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  346 00:A163 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  347 00:A167 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  348 00:A16B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  349 00:A16F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  350 00:A173 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  351 00:A177 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  352 00:A17B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  353 00:A17F -  -  -  -  digit4:
+  354 00:A17F FF 00 00 FF     .db $FF, $00, $00, $FF
+  355 00:A183 FF 00 00 FF     .db $FF, $00, $00, $FF
+  356 00:A187 FF 00 00 FF     .db $FF, $00, $00, $FF
+  357 00:A18B FF 00 00 FF     .db $FF, $00, $00, $FF
+  358 00:A18F FF 00 00 FF     .db $FF, $00, $00, $FF
+  359 00:A193 FF 00 00 FF     .db $FF, $00, $00, $FF
+  360 00:A197 FF 00 00 FF     .db $FF, $00, $00, $FF
+  361 00:A19B FF 00 00 FF     .db $FF, $00, $00, $FF
+  362 00:A19F FF 00 00 FF     .db $FF, $00, $00, $FF
+  363 00:A1A3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  364 00:A1A7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  365 00:A1AB FF 00 00 FF     .db $FF, $00, $00, $FF
+  366 00:A1AF FF 00 00 FF     .db $FF, $00, $00, $FF
+  367 00:A1B3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  368 00:A1B7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  369 00:A1BB FF 00 00 FF     .db $FF, $00, $00, $FF
+  370 00:A1BF FF 00 00 FF     .db $FF, $00, $00, $FF
+  371 00:A1C3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  372 00:A1C7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  373 00:A1CB FF 00 00 FF     .db $FF, $00, $00, $FF
+  374 00:A1CF FF 00 00 FF     .db $FF, $00, $00, $FF
+  375 00:A1D3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  376 00:A1D7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  377 00:A1DB FF 00 00 FF     .db $FF, $00, $00, $FF
+  378 00:A1DF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  379 00:A1E3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  380 00:A1E7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  381 00:A1EB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  382 00:A1EF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  383 00:A1F3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  384 00:A1F7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  385 00:A1FB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  386 00:A1FF 00 00 00 FF     .db $00, $00, $00, $FF
+  387 00:A203 00 00 00 FF     .db $00, $00, $00, $FF
+  388 00:A207 00 00 00 FF     .db $00, $00, $00, $FF
+  389 00:A20B 00 00 00 FF     .db $00, $00, $00, $FF
+  390 00:A20F 00 00 00 FF     .db $00, $00, $00, $FF
+  391 00:A213 00 00 00 FF     .db $00, $00, $00, $FF
+  392 00:A217 00 00 00 FF     .db $00, $00, $00, $FF
+  393 00:A21B 00 00 00 FF     .db $00, $00, $00, $FF
+  394 00:A21F 00 00 00 FF     .db $00, $00, $00, $FF
+  395 00:A223 00 00 00 FF     .db $00, $00, $00, $FF
+  396 00:A227 00 00 00 FF     .db $00, $00, $00, $FF
+  397 00:A22B 00 00 00 FF     .db $00, $00, $00, $FF
+  398 00:A22F 00 00 00 FF     .db $00, $00, $00, $FF
+  399 00:A233 00 00 00 FF     .db $00, $00, $00, $FF
+  400 00:A237 00 00 00 FF     .db $00, $00, $00, $FF
+  401 00:A23B 00 00 00 FF     .db $00, $00, $00, $FF
+  402 00:A23F 00 00 00 FF     .db $00, $00, $00, $FF
+  403 00:A243 00 00 00 FF     .db $00, $00, $00, $FF
+  404 00:A247 00 00 00 FF     .db $00, $00, $00, $FF
+  405 00:A24B 00 00 00 FF     .db $00, $00, $00, $FF
+  406 00:A24F 00 00 00 FF     .db $00, $00, $00, $FF
+  407 00:A253 00 00 00 FF     .db $00, $00, $00, $FF
+  408 00:A257 00 00 00 FF     .db $00, $00, $00, $FF
+  409 00:A25B 00 00 00 FF     .db $00, $00, $00, $FF
+  410 00:A25F -  -  -  -  
+  411 00:A25F -  -  -  -  digit5:
+  412 00:A25F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  413 00:A263 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  414 00:A267 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  415 00:A26B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  416 00:A26F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  417 00:A273 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  418 00:A277 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  419 00:A27B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  420 00:A27F FF 00 00 00     .db $FF, $00, $00, $00
+  421 00:A283 FF 00 00 00     .db $FF, $00, $00, $00
+  422 00:A287 FF 00 00 00     .db $FF, $00, $00, $00
+  423 00:A28B FF 00 00 00     .db $FF, $00, $00, $00
+  424 00:A28F FF 00 00 00     .db $FF, $00, $00, $00
+  425 00:A293 FF 00 00 00     .db $FF, $00, $00, $00
+  426 00:A297 FF 00 00 00     .db $FF, $00, $00, $00
+  427 00:A29B FF 00 00 00     .db $FF, $00, $00, $00
+  428 00:A29F FF 00 00 00     .db $FF, $00, $00, $00
+  429 00:A2A3 FF 00 00 00     .db $FF, $00, $00, $00
+  430 00:A2A7 FF 00 00 00     .db $FF, $00, $00, $00
+  431 00:A2AB FF 00 00 00     .db $FF, $00, $00, $00
+  432 00:A2AF FF 00 00 00     .db $FF, $00, $00, $00
+  433 00:A2B3 FF 00 00 00     .db $FF, $00, $00, $00
+  434 00:A2B7 FF 00 00 00     .db $FF, $00, $00, $00
+  435 00:A2BB FF 00 00 00     .db $FF, $00, $00, $00
+  436 00:A2BF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  437 00:A2C3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  438 00:A2C7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  439 00:A2CB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  440 00:A2CF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  441 00:A2D3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  442 00:A2D7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  443 00:A2DB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  444 00:A2DF 00 00 00 FF     .db $00, $00, $00, $FF
+  445 00:A2E3 00 00 00 FF     .db $00, $00, $00, $FF
+  446 00:A2E7 00 00 00 FF     .db $00, $00, $00, $FF
+  447 00:A2EB 00 00 00 FF     .db $00, $00, $00, $FF
+  448 00:A2EF 00 00 00 FF     .db $00, $00, $00, $FF
+  449 00:A2F3 00 00 00 FF     .db $00, $00, $00, $FF
+  450 00:A2F7 00 00 00 FF     .db $00, $00, $00, $FF
+  451 00:A2FB 00 00 00 FF     .db $00, $00, $00, $FF
+  452 00:A2FF 00 00 00 FF     .db $00, $00, $00, $FF
+  453 00:A303 00 00 00 FF     .db $00, $00, $00, $FF
+  454 00:A307 00 00 00 FF     .db $00, $00, $00, $FF
+  455 00:A30B 00 00 00 FF     .db $00, $00, $00, $FF
+  456 00:A30F 00 00 00 FF     .db $00, $00, $00, $FF
+  457 00:A313 00 00 00 FF     .db $00, $00, $00, $FF
+  458 00:A317 00 00 00 FF     .db $00, $00, $00, $FF
+  459 00:A31B 00 00 00 FF     .db $00, $00, $00, $FF
+  460 00:A31F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  461 00:A323 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  462 00:A327 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  463 00:A32B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  464 00:A32F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  465 00:A333 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  466 00:A337 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  467 00:A33B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  468 00:A33F -  -  -  -  digit6:
+  469 00:A33F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  470 00:A343 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  471 00:A347 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  472 00:A34B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  473 00:A34F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  474 00:A353 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  475 00:A357 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  476 00:A35B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  477 00:A35F FF 00 00 00     .db $FF, $00, $00, $00
+  478 00:A363 FF 00 00 00     .db $FF, $00, $00, $00
+  479 00:A367 FF 00 00 00     .db $FF, $00, $00, $00
+  480 00:A36B FF 00 00 00     .db $FF, $00, $00, $00
+  481 00:A36F FF 00 00 00     .db $FF, $00, $00, $00
+  482 00:A373 FF 00 00 00     .db $FF, $00, $00, $00
+  483 00:A377 FF 00 00 00     .db $FF, $00, $00, $00
+  484 00:A37B FF 00 00 00     .db $FF, $00, $00, $00
+  485 00:A37F FF 00 00 00     .db $FF, $00, $00, $00
+  486 00:A383 FF 00 00 00     .db $FF, $00, $00, $00
+  487 00:A387 FF 00 00 00     .db $FF, $00, $00, $00
+  488 00:A38B FF 00 00 00     .db $FF, $00, $00, $00
+  489 00:A38F FF 00 00 00     .db $FF, $00, $00, $00
+  490 00:A393 FF 00 00 00     .db $FF, $00, $00, $00
+  491 00:A397 FF 00 00 00     .db $FF, $00, $00, $00
+  492 00:A39B FF 00 00 00     .db $FF, $00, $00, $00
+  493 00:A39F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  494 00:A3A3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  495 00:A3A7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  496 00:A3AB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  497 00:A3AF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  498 00:A3B3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  499 00:A3B7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  500 00:A3BB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  501 00:A3BF FF 00 00 FF     .db $FF, $00, $00, $FF
+  502 00:A3C3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  503 00:A3C7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  504 00:A3CB FF 00 00 FF     .db $FF, $00, $00, $FF
+  505 00:A3CF FF 00 00 FF     .db $FF, $00, $00, $FF
+  506 00:A3D3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  507 00:A3D7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  508 00:A3DB FF 00 00 FF     .db $FF, $00, $00, $FF
+  509 00:A3DF FF 00 00 FF     .db $FF, $00, $00, $FF
+  510 00:A3E3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  511 00:A3E7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  512 00:A3EB FF 00 00 FF     .db $FF, $00, $00, $FF
+  513 00:A3EF FF 00 00 FF     .db $FF, $00, $00, $FF
+  514 00:A3F3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  515 00:A3F7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  516 00:A3FB FF 00 00 FF     .db $FF, $00, $00, $FF
+  517 00:A3FF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  518 00:A403 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  519 00:A407 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  520 00:A40B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  521 00:A40F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  522 00:A413 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  523 00:A417 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  524 00:A41B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  525 00:A41F -  -  -  -  
+  526 00:A41F -  -  -  -  digit7:
+  527 00:A41F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  528 00:A423 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  529 00:A427 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  530 00:A42B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  531 00:A42F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  532 00:A433 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  533 00:A437 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  534 00:A43B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  535 00:A43F 00 00 00 FF     .db $00, $00, $00, $FF
+  536 00:A443 00 00 00 FF     .db $00, $00, $00, $FF
+  537 00:A447 00 00 00 FF     .db $00, $00, $00, $FF
+  538 00:A44B 00 00 00 FF     .db $00, $00, $00, $FF
+  539 00:A44F 00 00 00 FF     .db $00, $00, $00, $FF
+  540 00:A453 00 00 00 FF     .db $00, $00, $00, $FF
+  541 00:A457 00 00 00 FF     .db $00, $00, $00, $FF
+  542 00:A45B 00 00 00 FF     .db $00, $00, $00, $FF
+  543 00:A45F 00 00 00 FF     .db $00, $00, $00, $FF
+  544 00:A463 00 00 00 FF     .db $00, $00, $00, $FF
+  545 00:A467 00 00 00 FF     .db $00, $00, $00, $FF
+  546 00:A46B 00 00 00 FF     .db $00, $00, $00, $FF
+  547 00:A46F 00 00 00 FF     .db $00, $00, $00, $FF
+  548 00:A473 00 00 00 FF     .db $00, $00, $00, $FF
+  549 00:A477 00 00 00 FF     .db $00, $00, $00, $FF
+  550 00:A47B 00 00 00 FF     .db $00, $00, $00, $FF
+  551 00:A47F 00 00 00 FF     .db $00, $00, $00, $FF
+  552 00:A483 00 00 00 FF     .db $00, $00, $00, $FF
+  553 00:A487 00 00 00 FF     .db $00, $00, $00, $FF
+  554 00:A48B 00 00 00 FF     .db $00, $00, $00, $FF
+  555 00:A48F 00 00 00 FF     .db $00, $00, $00, $FF
+  556 00:A493 00 00 00 FF     .db $00, $00, $00, $FF
+  557 00:A497 00 00 00 FF     .db $00, $00, $00, $FF
+  558 00:A49B 00 00 00 FF     .db $00, $00, $00, $FF
+  559 00:A49F 00 00 00 FF     .db $00, $00, $00, $FF
+  560 00:A4A3 00 00 00 FF     .db $00, $00, $00, $FF
+  561 00:A4A7 00 00 00 FF     .db $00, $00, $00, $FF
+  562 00:A4AB 00 00 00 FF     .db $00, $00, $00, $FF
+  563 00:A4AF 00 00 00 FF     .db $00, $00, $00, $FF
+  564 00:A4B3 00 00 00 FF     .db $00, $00, $00, $FF
+  565 00:A4B7 00 00 00 FF     .db $00, $00, $00, $FF
+  566 00:A4BB 00 00 00 FF     .db $00, $00, $00, $FF
+  567 00:A4BF 00 00 00 FF     .db $00, $00, $00, $FF
+  568 00:A4C3 00 00 00 FF     .db $00, $00, $00, $FF
+  569 00:A4C7 00 00 00 FF     .db $00, $00, $00, $FF
+  570 00:A4CB 00 00 00 FF     .db $00, $00, $00, $FF
+  571 00:A4CF 00 00 00 FF     .db $00, $00, $00, $FF
+  572 00:A4D3 00 00 00 FF     .db $00, $00, $00, $FF
+  573 00:A4D7 00 00 00 FF     .db $00, $00, $00, $FF
+  574 00:A4DB 00 00 00 FF     .db $00, $00, $00, $FF
+  575 00:A4DF 00 00 00 FF     .db $00, $00, $00, $FF
+  576 00:A4E3 00 00 00 FF     .db $00, $00, $00, $FF
+  577 00:A4E7 00 00 00 FF     .db $00, $00, $00, $FF
+  578 00:A4EB 00 00 00 FF     .db $00, $00, $00, $FF
+  579 00:A4EF 00 00 00 FF     .db $00, $00, $00, $FF
+  580 00:A4F3 00 00 00 FF     .db $00, $00, $00, $FF
+  581 00:A4F7 00 00 00 FF     .db $00, $00, $00, $FF
+  582 00:A4FB 00 00 00 FF     .db $00, $00, $00, $FF
+  583 00:A4FF -  -  -  -  digit8:
+  584 00:A4FF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  585 00:A503 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  586 00:A507 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  587 00:A50B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  588 00:A50F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  589 00:A513 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  590 00:A517 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  591 00:A51B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  592 00:A51F FF 00 00 FF     .db $FF, $00, $00, $FF
+  593 00:A523 FF 00 00 FF     .db $FF, $00, $00, $FF
+  594 00:A527 FF 00 00 FF     .db $FF, $00, $00, $FF
+  595 00:A52B FF 00 00 FF     .db $FF, $00, $00, $FF
+  596 00:A52F FF 00 00 FF     .db $FF, $00, $00, $FF
+  597 00:A533 FF 00 00 FF     .db $FF, $00, $00, $FF
+  598 00:A537 FF 00 00 FF     .db $FF, $00, $00, $FF
+  599 00:A53B FF 00 00 FF     .db $FF, $00, $00, $FF
+  600 00:A53F FF 00 00 FF     .db $FF, $00, $00, $FF
+  601 00:A543 FF 00 00 FF     .db $FF, $00, $00, $FF
+  602 00:A547 FF 00 00 FF     .db $FF, $00, $00, $FF
+  603 00:A54B FF 00 00 FF     .db $FF, $00, $00, $FF
+  604 00:A54F FF 00 00 FF     .db $FF, $00, $00, $FF
+  605 00:A553 FF 00 00 FF     .db $FF, $00, $00, $FF
+  606 00:A557 FF 00 00 FF     .db $FF, $00, $00, $FF
+  607 00:A55B FF 00 00 FF     .db $FF, $00, $00, $FF
+  608 00:A55F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  609 00:A563 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  610 00:A567 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  611 00:A56B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  612 00:A56F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  613 00:A573 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  614 00:A577 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  615 00:A57B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  616 00:A57F FF 00 00 FF     .db $FF, $00, $00, $FF
+  617 00:A583 FF 00 00 FF     .db $FF, $00, $00, $FF
+  618 00:A587 FF 00 00 FF     .db $FF, $00, $00, $FF
+  619 00:A58B FF 00 00 FF     .db $FF, $00, $00, $FF
+  620 00:A58F FF 00 00 FF     .db $FF, $00, $00, $FF
+  621 00:A593 FF 00 00 FF     .db $FF, $00, $00, $FF
+  622 00:A597 FF 00 00 FF     .db $FF, $00, $00, $FF
+  623 00:A59B FF 00 00 FF     .db $FF, $00, $00, $FF
+  624 00:A59F FF 00 00 FF     .db $FF, $00, $00, $FF
+  625 00:A5A3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  626 00:A5A7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  627 00:A5AB FF 00 00 FF     .db $FF, $00, $00, $FF
+  628 00:A5AF FF 00 00 FF     .db $FF, $00, $00, $FF
+  629 00:A5B3 FF 00 00 FF     .db $FF, $00, $00, $FF
+  630 00:A5B7 FF 00 00 FF     .db $FF, $00, $00, $FF
+  631 00:A5BB FF 00 00 FF     .db $FF, $00, $00, $FF
+  632 00:A5BF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  633 00:A5C3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  634 00:A5C7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  635 00:A5CB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  636 00:A5CF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  637 00:A5D3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  638 00:A5D7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  639 00:A5DB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  640 00:A5DF -  -  -  -  digit9:
+  641 00:A5DF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  642 00:A5E3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  643 00:A5E7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  644 00:A5EB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  645 00:A5EF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  646 00:A5F3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  647 00:A5F7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  648 00:A5FB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  649 00:A5FF FF 00 00 FF     .db $FF, $00, $00, $FF
+  650 00:A603 FF 00 00 FF     .db $FF, $00, $00, $FF
+  651 00:A607 FF 00 00 FF     .db $FF, $00, $00, $FF
+  652 00:A60B FF 00 00 FF     .db $FF, $00, $00, $FF
+  653 00:A60F FF 00 00 FF     .db $FF, $00, $00, $FF
+  654 00:A613 FF 00 00 FF     .db $FF, $00, $00, $FF
+  655 00:A617 FF 00 00 FF     .db $FF, $00, $00, $FF
+  656 00:A61B FF 00 00 FF     .db $FF, $00, $00, $FF
+  657 00:A61F FF 00 00 FF     .db $FF, $00, $00, $FF
+  658 00:A623 FF 00 00 FF     .db $FF, $00, $00, $FF
+  659 00:A627 FF 00 00 FF     .db $FF, $00, $00, $FF
+  660 00:A62B FF 00 00 FF     .db $FF, $00, $00, $FF
+  661 00:A62F FF 00 00 FF     .db $FF, $00, $00, $FF
+  662 00:A633 FF 00 00 FF     .db $FF, $00, $00, $FF
+  663 00:A637 FF 00 00 FF     .db $FF, $00, $00, $FF
+  664 00:A63B FF 00 00 FF     .db $FF, $00, $00, $FF
+  665 00:A63F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  666 00:A643 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  667 00:A647 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  668 00:A64B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  669 00:A64F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  670 00:A653 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  671 00:A657 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  672 00:A65B FF FF FF FF     .db $FF, $FF, $FF, $FF
+  673 00:A65F 00 00 00 FF     .db $00, $00, $00, $FF
+  674 00:A663 00 00 00 FF     .db $00, $00, $00, $FF
+  675 00:A667 00 00 00 FF     .db $00, $00, $00, $FF
+  676 00:A66B 00 00 00 FF     .db $00, $00, $00, $FF
+  677 00:A66F 00 00 00 FF     .db $00, $00, $00, $FF
+  678 00:A673 00 00 00 FF     .db $00, $00, $00, $FF
+  679 00:A677 00 00 00 FF     .db $00, $00, $00, $FF
+  680 00:A67B 00 00 00 FF     .db $00, $00, $00, $FF
+  681 00:A67F 00 00 00 FF     .db $00, $00, $00, $FF
+  682 00:A683 00 00 00 FF     .db $00, $00, $00, $FF
+  683 00:A687 00 00 00 FF     .db $00, $00, $00, $FF
+  684 00:A68B 00 00 00 FF     .db $00, $00, $00, $FF
+  685 00:A68F 00 00 00 FF     .db $00, $00, $00, $FF
+  686 00:A693 00 00 00 FF     .db $00, $00, $00, $FF
+  687 00:A697 00 00 00 FF     .db $00, $00, $00, $FF
+  688 00:A69B 00 00 00 FF     .db $00, $00, $00, $FF
+  689 00:A69F FF FF FF FF     .db $FF, $FF, $FF, $FF
+  690 00:A6A3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  691 00:A6A7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  692 00:A6AB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  693 00:A6AF FF FF FF FF     .db $FF, $FF, $FF, $FF
+  694 00:A6B3 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  695 00:A6B7 FF FF FF FF     .db $FF, $FF, $FF, $FF
+  696 00:A6BB FF FF FF FF     .db $FF, $FF, $FF, $FF
+  697 00:A6BF -  -  -  -  
+  698 00:A6BF -  -  -  -  .end
+  699 00:A6BF -  -  -  -  .end
